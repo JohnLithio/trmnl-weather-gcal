@@ -1,0 +1,223 @@
+<div class="view">
+  <div style="display:flex; flex-wrap:nowrap; gap:14px; align-items:flex-start;">
+
+    <!-- LEFT: Weather -->
+    <div style="flex:0 0 50%; min-width:0;">
+
+      <!-- Current conditions -->
+      <div style="margin-top:10px; display:flex; gap:10px; align-items:flex-start;">
+        <div style="min-width:0;">
+          <span style="font-size:56px; font-weight:900; line-height:1;">{{ weather.current.temp }}°</span>
+          {% if weather.current.feels_like and weather.current.feels_like != weather.current.temp %}
+          <div style="font-size:14px; margin-top:2px;">Feels {{ weather.current.feels_like }}°</div>
+          {% endif %}
+          <div style="font-size:15px; margin-top:2px;">{{ weather.current.condition }}</div>
+        </div>
+        <div style="min-width:0; display:grid; grid-template-columns: 1fr 1fr; gap:2px 12px; font-size:15px;">
+          <!-- Row 1: H/L spans both columns -->
+          <div style="grid-column: span 2;">
+            <b>H</b> {{ weather.today.high }}° / <b>L</b> {{ weather.today.low }}°
+          </div>
+          <!-- Row 2: Wind | Humidity -->
+          <div><b>Wind</b> {{ weather.hourly[0].wind_speed }}mph {{ weather.hourly[0].wind_dir }}</div>
+          <div><b>Hum</b> {{ weather.current.humidity }}%</div>
+          <!-- Row 3: Current UV | Current AQI -->
+          <div><b>UV</b> {{ weather.hourly[0].uv }}</div>
+          <div>{% assign aqi = weather.hourly[0].aqi %}<b>AQI</b> {{ aqi }} · {% if aqi <= 50 %}Good{% elsif aqi <= 100 %}Moderate{% elsif aqi <= 150 %}Sensitive{% elsif aqi <= 200 %}Unhealthy{% elsif aqi <= 300 %}Very Unhealthy{% else %}Hazardous{% endif %}</div>
+          <!-- Row 4: Max UV | Max AQI (24h) -->
+          <div><b>UV</b> {{ weather.today.max_uv }} max</div>
+          <div><b>AQI</b> {{ weather.today.max_aqi }} max</div>
+          <!-- Row 5: Sunrise | Sunset -->
+          <div><b>Sunrise</b> {{ weather.today.sunrise }}</div>
+          <div><b>Sunset</b> {{ weather.today.sunset }}</div>
+        </div>
+      </div>
+
+      <!-- Temperature line graph -->
+      {% if weather.hourly and weather.hourly.size > 1 %}
+      {% assign n = 24 %}
+      {% if weather.hourly.size < n %}{% assign n = weather.hourly.size %}{% endif %}
+
+      {%- assign min_t = 1000 -%}
+      {%- assign max_t = -1000 -%}
+      {% for h in weather.hourly limit: n %}
+        {% if h.temp < min_t %}{% assign min_t = h.temp %}{% endif %}
+        {% if h.temp > max_t %}{% assign max_t = h.temp %}{% endif %}
+      {% endfor %}
+      {% assign range = max_t | minus: min_t %}
+      {% if range == 0 %}{% assign range = 1 %}{% endif %}
+
+      <div style="margin-top:12px;">
+        <div style="display:flex; justify-content:space-between; align-items:baseline;">
+          <div style="font-weight:800; font-size:15px;">Next 24 Hours</div>
+        </div>
+
+        {% assign w = 400 %}
+        {% assign hgt = 84 %}
+        {% assign pad = 6 %}
+        {% assign left_pad = 34 %}
+
+        {% assign inner_h = hgt | minus: pad | minus: pad %}
+        {% assign denom = n | minus: 1 %}
+        {% if denom == 0 %}{% assign denom = 1 %}{% endif %}
+
+        {% assign draw_w = w | minus: left_pad %}
+        {% assign step = draw_w | divided_by: denom %}
+
+        {% capture d_raw %}
+        {% for hh in weather.hourly limit: n %}
+          {% assign i = forloop.index0 %}
+          {% assign x_base = i | times: step | round: 0 %}
+          {% assign x = x_base | plus: left_pad | round: 0 %}
+
+          {% assign t_num = hh.temp | plus: 0 %}
+          {% assign min_num = min_t | plus: 0 %}
+          {% assign range_num = range | plus: 0 %}
+          {% assign inner_num = inner_h | plus: 0 %}
+          {% assign pad_num = pad | plus: 0 %}
+
+          {% assign t_offset = t_num | minus: min_num %}
+          {% assign scaled = t_offset | times: inner_num | divided_by: range_num %}
+          {% assign y = inner_num | minus: scaled | plus: pad_num | round: 0 %}
+
+          {% if forloop.first %}
+          M {{ x }} {{ y }}
+          {% else %}
+          L {{ x }} {{ y }}
+          {% endif %}
+        {% endfor %}
+        {% endcapture %}
+
+        {% assign d = d_raw | replace: "\n", " " | replace: "  ", " " | strip %}
+
+        <svg width="{{ w }}" height="92" viewBox="0 0 {{ w }} {{ hgt }}"
+          xmlns="http://www.w3.org/2000/svg" style="display:block; margin-top:6px;">
+
+          <!-- precip shading -->
+          {% for hh in weather.hourly limit: n %}
+            {% assign p = hh.precip_chance | default: 0 | plus: 0 %}
+            {% if p >= 20 %}
+              {% assign i = forloop.index0 %}
+              {% assign x0 = i | times: step | round: 0 %}
+              {% assign x0 = x0 | plus: left_pad | round: 0 %}
+              {% assign bw = step | round: 0 %}
+              {% if bw < 1 %}{% assign bw = 1 %}{% endif %}
+
+              {% assign op = 0.18 %}
+              {% if p >= 40 %}{% assign op = 0.28 %}{% endif %}
+              {% if p >= 70 %}{% assign op = 0.40 %}{% endif %}
+
+              <rect x="{{ x0 }}" y="0" width="{{ bw }}" height="{{ hgt }}"
+                fill="#888" style="opacity:{{ op }};" />
+            {% endif %}
+          {% endfor %}
+
+          <line x1="{{ left_pad }}" y1="{{ hgt | minus: 1 }}" x2="{{ w }}" y2="{{ hgt | minus: 1 }}"
+            stroke="#000" stroke-width="1" />
+
+          <path d="{{ d }}" fill="none"
+            stroke="#000" stroke-width="3"
+            stroke-linecap="round" stroke-linejoin="round" />
+
+          <text x="0" y="12" font-size="15" fill="#000">{{ max_t }}°</text>
+          <text x="0" y="{{ hgt | minus: 6 }}" font-size="15" fill="#000">{{ min_t }}°</text>
+        </svg>
+
+        {% assign tick_indices = "0,4,8,12,16,20,23" | split: "," %}
+
+        <div style="display:flex; justify-content:space-between; margin-top:4px; padding-left:{{ left_pad }}px; font-size:13px;">
+          {% for idx_s in tick_indices %}
+            {% assign idx = idx_s | plus: 0 %}
+            {% if idx < n %}
+              {% assign h = weather.hourly[idx] %}
+              <div style="display:flex; flex-direction:column; align-items:center; gap:1px;">
+                <span style="font-weight:700;">{{ h.hour }}</span>
+                <span>{{ h.icon }}</span>
+                <span>{{ h.precip_chance }}%</span>
+                <span>{{ h.wind_speed }}mph</span>
+              </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Daily forecast -->
+      {% if weather.daily and weather.daily.size > 0 %}
+      <div style="margin-top:10px; padding-top:8px; border-top:1px solid rgba(0,0,0,0.10);">
+        <div style="display:flex; flex-direction:column; gap:2px;">
+          {% for d in weather.daily limit: 5 %}
+          <div style="display:grid; grid-template-columns: 100px 100px 70px; column-gap:10px; align-items:baseline; font-size:15px;">
+            <!-- Day -->
+            <div style="font-weight:800; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+              {{ d.date }}
+            </div>
+
+            <!-- Hi / Lo -->
+            <div style="text-align:right; white-space:nowrap;">
+              <span style="font-weight:800;">H</span>{% if d.high >= 0 and d.high < 10 %}&nbsp;{% endif %} {{ d.high }}°
+              <span>·</span>
+              <span style="font-weight:800;">L</span>{% if d.low >= 0 and d.low < 10 %}&nbsp;{% endif %} {{ d.low }}°
+            </div>
+
+            <!-- Precipitation -->
+            <div style="text-align:right; white-space:nowrap;">
+              <span style="font-weight:800;">Precip</span>
+              {% if d.precip_chance < 10 %}&nbsp;{% endif %}{{ d.precip_chance }}%
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Divider -->
+    <div style="flex:0 0 1px; align-self:stretch; background:rgba(0,0,0,0.12);"></div>
+
+    <!-- RIGHT: Calendar -->
+    <div style="flex:0 0 50%; min-width:0;">
+      <div class="title">
+        <span style="font-weight:700;">
+          {{ generated_at | date: "%a %b %-d" }}
+        </span>
+      </div>
+
+      <div style="margin-top:10px; display:flex; flex-direction:column; gap:6px;">
+        {% if events == blank or events.size == 0 %}
+        <div class="muted">No upcoming events</div>
+        {% else %}
+        {% for e in events limit: 17 %}
+        <div style="font-size:15px; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+          <span style="display:inline-block; min-width:92px; font-weight:800;">
+            {{ e.date_formatted }}
+          </span>
+          <span style="margin-right:6px;">·</span>
+          <span>{{ e.summary }}</span>
+
+          {% if e.all_day %}
+          <span></span>
+          {% else %}
+          <span style="margin-left:6px;">{{ e.start_time }}–{{ e.end_time }}</span>
+          {% endif %}
+        </div>
+        {% endfor %}
+        {% endif %}
+      </div>
+
+      <div style="margin-top:4px; font-size:12px; color:#666;">
+        {% if event_count > 17 %}
+        Showing 17 of {{ event_count }} events in the next 365 days
+        {% else %}
+        {{ event_count }} events in the next 365 days
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Last Updated -->
+  <div style="position:absolute; bottom:0px; left:0px; font-size:12px; color:#666;">
+  Last Updated {{ generated_at | date: "%-I:%M %p" }}
+  </div>
+</div>
