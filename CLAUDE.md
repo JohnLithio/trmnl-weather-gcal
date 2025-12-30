@@ -13,15 +13,13 @@ TRMNL Private Plugin for Google Calendar + Weather. A FastAPI backend that serve
 uv sync                                    # Install dependencies
 uv run uvicorn app.main:app --reload       # Run locally on port 8000
 
-# Deployment to Cloud Run (replace PROJECT_ID and REGION)
-docker build --platform linux/amd64 -t REGION-docker.pkg.dev/PROJECT_ID/REPO/app:latest .
-docker push REGION-docker.pkg.dev/PROJECT_ID/REPO/app:latest
-gcloud run deploy SERVICE_NAME --image REGION-docker.pkg.dev/PROJECT_ID/REPO/app:latest --region REGION
+# Deployment to Cloud Run
+make deploy                                # Build, push, and deploy to GCP
 ```
 
 ## Deployment Notes
 
-**Backend changes** (anything in `app/`): Requires Docker build + push + gcloud deploy.
+**Backend changes** (anything in `app/`): Run `make deploy` to build, push, and deploy. Configuration (GCP_PROJECT, GCP_REGION, GCP_SERVICE_NAME, GCP_ARTIFACT_REPO) is read from `.env`.
 
 **markup.liquid**: This file is NOT deployed. It's a Liquid template that gets copy/pasted directly into the TRMNL dashboard UI by the user. Changes to markup.liquid only require updating it in the TRMNL Private Plugin settings.
 
