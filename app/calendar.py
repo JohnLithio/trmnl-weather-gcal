@@ -54,6 +54,42 @@ def _parse_event_end_time(event: dict, timezone: ZoneInfo) -> datetime | None:
     return None
 
 
+def _format_date_range(start_dt: datetime, end_dt: datetime | None, is_all_day: bool) -> str:
+    """
+    Format the date, showing a range for multi-day events.
+
+    For all-day events, Google Calendar's end date is exclusive (day after last day),
+    so we subtract 1 day to get the actual last day.
+
+    Examples:
+    - Single day: "Wed Mar 18"
+    - Multi-day same month: "Wed Mar 18-22"
+    - Multi-day cross month: "Mon Mar 30-Apr 1"
+    """
+    start_formatted = start_dt.strftime("%a %b %-d")
+
+    if end_dt is None:
+        return start_formatted
+
+    # For all-day events, end date is exclusive, so subtract 1 day
+    if is_all_day:
+        actual_end = end_dt - timedelta(days=1)
+    else:
+        actual_end = end_dt
+
+    # Check if it's a single-day event
+    if start_dt.date() == actual_end.date():
+        return start_formatted
+
+    # Multi-day event - format the range
+    if start_dt.month == actual_end.month:
+        # Same month: "Wed Mar 18-22"
+        return f"{start_formatted}-{actual_end.day}"
+    else:
+        # Different months: "Mon Mar 30-Apr 1"
+        return f"{start_formatted}-{actual_end.strftime('%b %-d')}"
+
+
 def normalize_event(event: dict, calendar_id: str, timezone: ZoneInfo) -> dict | None:
     """
     Normalize a Google Calendar event into our unified structure.
@@ -73,7 +109,7 @@ def normalize_event(event: dict, calendar_id: str, timezone: ZoneInfo) -> dict |
         "id": event.get("id", ""),
         "summary": event.get("summary", "(No title)"),
         "date": start_dt.strftime("%Y-%m-%d"),
-        "date_formatted": start_dt.strftime("%a %b %-d"),
+        "date_formatted": _format_date_range(start_dt, end_dt, is_all_day),
         "start_time": "" if is_all_day else start_dt.strftime("%-I:%M %p"),
         "end_time": "" if is_all_day or end_dt is None else end_dt.strftime("%-I:%M %p"),
         "all_day": is_all_day,
