@@ -54,6 +54,22 @@ def _parse_event_end_time(event: dict, timezone: ZoneInfo) -> datetime | None:
     return None
 
 
+def _format_time(dt: datetime) -> str:
+    """
+    Format time cleanly: no leading zeros, no :00 for on-the-hour times.
+
+    Examples:
+    - 12:00 PM -> "12 PM"
+    - 08:00 AM -> "8 AM"
+    - 10:30 PM -> "10:30 PM"
+    - 08:45 PM -> "8:45 PM"
+    """
+    if dt.minute == 0:
+        return dt.strftime("%-I %p")
+    else:
+        return dt.strftime("%-I:%M %p")
+
+
 def _format_date_range(start_dt: datetime, end_dt: datetime | None, is_all_day: bool) -> str:
     """
     Format the date, showing a range for multi-day events.
@@ -62,14 +78,16 @@ def _format_date_range(start_dt: datetime, end_dt: datetime | None, is_all_day: 
     so we subtract 1 day to get the actual last day.
 
     Examples:
-    - Single day: "Wed Mar 18"
-    - Multi-day same month: "Wed Mar 18-22"
-    - Multi-day cross month: "Mon Mar 30-Apr 1"
+    - Single day all-day: "Wed Mar 18"
+    - Multi-day all-day same month: "Wed Mar 18-22"
+    - Multi-day all-day cross month: "Mon Mar 30-Apr 1"
+    - Multi-day timed same month: "Mon Mar 30 10 PM-Apr 1 10 AM"
+    - Multi-day timed cross month: "Mon Mar 30 10 PM-Apr 1 10 AM"
     """
-    start_formatted = start_dt.strftime("%a %b %-d")
+    start_date_formatted = start_dt.strftime("%a %b %-d")
 
     if end_dt is None:
-        return start_formatted
+        return start_date_formatted
 
     # For all-day events, end date is exclusive, so subtract 1 day
     if is_all_day:
@@ -79,15 +97,21 @@ def _format_date_range(start_dt: datetime, end_dt: datetime | None, is_all_day: 
 
     # Check if it's a single-day event
     if start_dt.date() == actual_end.date():
-        return start_formatted
+        return start_date_formatted
 
     # Multi-day event - format the range
-    if start_dt.month == actual_end.month:
-        # Same month: "Wed Mar 18-22"
-        return f"{start_formatted}-{actual_end.day}"
+    if is_all_day:
+        # All-day multi-day: just show dates
+        if start_dt.month == actual_end.month:
+            return f"{start_date_formatted}-{actual_end.day}"
+        else:
+            return f"{start_date_formatted}-{actual_end.strftime('%b %-d')}"
     else:
-        # Different months: "Mon Mar 30-Apr 1"
-        return f"{start_formatted}-{actual_end.strftime('%b %-d')}"
+        # Timed multi-day: include times
+        start_time = _format_time(start_dt)
+        end_time = _format_time(actual_end)
+        end_date_formatted = actual_end.strftime("%b %-d")
+        return f"{start_date_formatted} {start_time}-{end_date_formatted} {end_time}"
 
 
 def normalize_event(event: dict, calendar_id: str, timezone: ZoneInfo) -> dict | None:
@@ -110,8 +134,8 @@ def normalize_event(event: dict, calendar_id: str, timezone: ZoneInfo) -> dict |
         "summary": event.get("summary", "(No title)"),
         "date": start_dt.strftime("%Y-%m-%d"),
         "date_formatted": _format_date_range(start_dt, end_dt, is_all_day),
-        "start_time": "" if is_all_day else start_dt.strftime("%-I:%M %p"),
-        "end_time": "" if is_all_day or end_dt is None else end_dt.strftime("%-I:%M %p"),
+        "start_time": "" if is_all_day else _format_time(start_dt),
+        "end_time": "" if is_all_day or end_dt is None else _format_time(end_dt),
         "all_day": is_all_day,
         "location": event.get("location"),
         "calendar_id": calendar_id,
