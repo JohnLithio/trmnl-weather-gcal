@@ -68,8 +68,8 @@ def load_token() -> str | None:
 def delete_token() -> None:
     """Delete the stored token."""
     if _use_secret_manager():
-        # For Secret Manager, we save an empty value
-        _save_to_secret_manager("")
+        # For Secret Manager, we save a placeholder (empty payloads not allowed)
+        _save_to_secret_manager('{"deleted": true}')
     else:
         if TOKEN_FILE.exists():
             TOKEN_FILE.unlink()
